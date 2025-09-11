@@ -1,0 +1,1 @@
+This explains external validation for NOVELTY
