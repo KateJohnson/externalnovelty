@@ -9,7 +9,7 @@ library(copula)
 
 settings <- get_default_settings()
 settings$record_mode <- 2
-settings$n_base_agents <- 3.5e6
+settings$n_base_agents <- 1.5e4
 init_session(settings = settings)
 input <- get_input()
 time_horizon <- 25
@@ -30,8 +30,8 @@ terminate_session()
 
 # Create the calendar year variable to capture temporal trends
 all_events2 <- all_events2 %>%
-  mutate(calendar_year = 2015 + time_at_creation + local_time)
-
+  mutate(calendar_year = floor(2015 + time_at_creation + local_time)) # CORRECTION: add floor to prevent rounding up partial years
+         
 # Identify patients that fulfill eligibility criteria
 cand <- all_events2 %>%
   # Filter to those that are diagnosed
@@ -52,7 +52,7 @@ cand <- all_events2 %>%
     
     # Look back 1 year for history
     # If local_time >= 1, it guarantees >1 year of history exists prior to this row.
-    local_time >= 1
+    local_time >= 1 
   )
 
 # The following is a test to confirm the above is correctly creating the EPIC cohort
@@ -125,7 +125,7 @@ cand <- cand %>%
   )
 
 # Load NOVELTY RDS data (can be found on the github repo)
-target <- NOVELTY_target_Nov25 
+target <- readRDS("novelty_target_COPD.rds") #CORRECTION: File name wrong
 
 # Load Parameters from target 
 lev_smoking    <- target$smoking_levels
@@ -145,7 +145,8 @@ lambda_exac_sev <- target$lambda_exacerbations_severeplus_baseline
 
 clip01 <- function(U, eps = 1e-9) {pmin(pmax(U, eps), 1 - eps)}
 
-pit_categorical_from_probs <- function(values, level_order, level_probs) {
+pit_categorical_from_probs <- function(values, level_order, level_probs) { # this function assigns numeric values
+  #to the smoking status with values uniformly distributed between the prop of smoking categories observed in NOVELTY
   idx <- match(as.integer(values), as.integer(level_order))
   if (anyNA(idx)) stop("Found NAs or values not in level_order.")
   p <- as.numeric(level_probs); p <- p / sum(p)
@@ -154,13 +155,15 @@ pit_categorical_from_probs <- function(values, level_order, level_probs) {
   clip01(stats::runif(length(values), min = lower, max = upper))
 }
 
-pit_bernoulli <- function(y01, p) {
+pit_bernoulli <- function(y01, p) { # this function assigns numeric values to sex the values uniformly distributed between 0 and 1-p_sex when sex in EPIC
+  # = female, and 1-p_sex and 1 when sex = male.
   out <- rep(NA_real_, length(y01))
   i0 <- y01 == 0; i1 <- y01 == 1
   if(sum(i0, na.rm=T)>0) out[i0] <- runif(sum(i0, na.rm=T), 0, 1-p)
   if(sum(i1, na.rm=T)>0) out[i1] <- runif(sum(i1, na.rm=T), 1-p, 1)
   clip01(out)
 }
+
 
 pit_poisson <- function(k, lambda) {
   if (any(lambda <= 0 | !is.finite(lambda))) stop("Lambda must be positive.")
@@ -318,7 +321,8 @@ message("TEST: AGE (Check 0-1 range)")
 message("---------------------------------------------------")
 
 # Age
-u_age <- clip01(plnorm(pmax(cand$age_at_COPD, 1e-6), meanlog = ml_age, sdlog = sl_age))
+u_age <- clip01(plnorm(pmax(cand$age_at_COPD, 1e-6), meanlog = ml_age, sdlog = sl_age)) # CORRECTION use the age at index. Define a new variable in cand
+# when age = age_at_creation + local_time
 rng <- range(u_age)
 pass <- rng[1] > 0 & rng[2] < 1
 tag <- if(pass) "[PASS]" else "[FAIL]"
