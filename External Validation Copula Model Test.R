@@ -12,7 +12,7 @@ settings$record_mode <- 2
 settings$n_base_agents <- 3.5e6
 init_session(settings = settings)
 input <- get_input()
-time_horizon <- 25
+time_horizon <- 6
 input$values$global_parameters$time_horizon <- time_horizon
 run(input = input$values)
 op <- Cget_output()
@@ -30,7 +30,7 @@ terminate_session()
 
 # Create the calendar year variable to capture temporal trends
 all_events2 <- all_events2 %>%
-  mutate(calendar_year = 2015 + time_at_creation + local_time)
+  mutate(calendar_year = floor (2015 + time_at_creation + local_time))
 
 # Identify patients that fulfill eligibility criteria
 cand <- all_events2 %>%
@@ -49,11 +49,12 @@ cand <- all_events2 %>%
   filter(
     # Index Date must be in 2016 or 2017
     index_time >= 2016 & index_time < 2018,
-    
     # Look back 1 year for history
     # If local_time >= 1, it guarantees >1 year of history exists prior to this row.
     local_time >= 1
-  )
+    ) %>%
+  # Create Age at Index
+  mutate(age_at_index = age_at_creation + local_time)
 
 # The following is a test to confirm the above is correctly creating the EPIC cohort
 test_cand <- function(cand_df) {
@@ -107,7 +108,6 @@ cand <- cand %>%
   mutate(
     smoking    = as.integer(as.character(smoking_status)),
     pack_years = as.numeric(pack_years),
-    
     gold       = as.integer(gold),
     exac_mod   = as.integer(exac_history_n_moderate),
     exac_sev   = as.integer(exac_history_n_severe_plus)
@@ -125,7 +125,7 @@ cand <- cand %>%
   )
 
 # Load NOVELTY RDS data (can be found on the github repo)
-target <- NOVELTY_target_Nov25 
+target <- readRDS("NOVELTY_target_Nov25.rds")
 
 # Load Parameters from target 
 lev_smoking    <- target$smoking_levels
@@ -318,7 +318,7 @@ message("TEST: AGE (Check 0-1 range)")
 message("---------------------------------------------------")
 
 # Age
-u_age <- clip01(plnorm(pmax(cand$age_at_COPD, 1e-6), meanlog = ml_age, sdlog = sl_age))
+u_age <- clip01(plnorm(pmax(cand$age_at_index, 1e-6), meanlog = ml_age, sdlog = sl_age))
 rng <- range(u_age)
 pass <- rng[1] > 0 & rng[2] < 1
 tag <- if(pass) "[PASS]" else "[FAIL]"
@@ -555,6 +555,7 @@ ll_marg <-
 
 # Total Score
 ll_joint <- ll_cop + ll_marg
+cand$ll_joint <- ll_joint
 
 # --- RESULTS ---
 message(sprintf("Marginal LL Range: %.2f to %.2f", min(ll_marg), max(ll_marg)))
@@ -607,4 +608,37 @@ if (max_diff > 0.3) {
   message("STATUS: [PASS] Simulation structure roughly matches Target.")
 }
 
+# ==============================================================================
+#  COHORT CREATION
+# ==============================================================================
+# Objective: 
+#   Convert the Joint Log-Likelihood scores (ll_joint) into sampling weights
+#   and select the final "Analytic Cohort" that mimics NOVELTY.
+
+message("\n---------------------------------------------------")
+message("GENERATING ANALYTIC COHORT")
+message("---------------------------------------------------")
+
+# Define Cohort Size
+N_MATCH <- 100
+
+# Calculate Weights
+# Logic: The Copula gave us a Log-Likelihood (ll_joint). 
+# Probability is proportional to exp(Log-Likelihood).
+cand$w_raw  <- exp(cand$ll_joint - max(cand$ll_joint))
+cand$w_norm <- cand$w_raw / sum(cand$w_raw)
+
+# We draw N_MATCH patients from the pool. 
+# Patients with high alignment scores (high w_norm) are much more likely to be picked.
+sampled_indices <- sample(seq_len(nrow(cand)), size = N_MATCH, replace = TRUE, prob = cand$w_norm)
+final_cohort    <- cand[sampled_indices, ]
+
+message(sprintf("Final Cohort Created: %d patients selected.", nrow(final_cohort)))
+
 message("\n=== FULL DIAGNOSTIC SUITE COMPLETE ===")
+
+
+
+
+
+
