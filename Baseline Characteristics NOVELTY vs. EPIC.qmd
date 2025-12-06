@@ -1,0 +1,262 @@
+---
+title: "Baseline Characteristics NOVELTY vs. EPIC"
+format: 
+  html:
+    toc: true
+    code-fold: true
+    theme: cosmo
+    self-contained: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# Load libraries
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(knitr)
+```
+
+------------------------------------------------------------------------
+
+## 1. Setup & Creating NOVELTY Baseline Characteristics
+
+We begin by loading the necessary libraries and creating the baseline characteristics for NOVELTY
+
+```{r}
+novelty_baseline <- list(
+  # --- Demographics ---
+  "Age"            = list(type = "continuous", mean = 63.7, sd = 9.7),
+  "Female"         = list(type = "binary", prop = 0.482),
+  
+  # --- GOLD Stage ---
+  "GOLD 1"         = list(type = "binary", prop = 0.219),
+  "GOLD 2"         = list(type = "binary", prop = 0.473),
+  "GOLD 3"         = list(type = "binary", prop = 0.234),
+  "GOLD 4"         = list(type = "binary", prop = 0.074),
+  
+  # --- Smoking Status ---
+  "Never Smoker"   = list(type = "binary", prop = 0.091),
+  "Current Smoker" = list(type = "binary", prop = 0.410),
+  "Former Smoker"  = list(type = "binary", prop = 0.498),
+  
+  # --- Exacerbations ---
+  "Moderate Exacerbation"       = list(type = "continuous", mean = 0.22, sd = 0.59),
+  "Severe Exacerbation"       = list(type = "continuous", mean = 0.17, sd = 0.47),
+  
+  # --- mMRC ---
+  "mMRC (>0)"   = list(type = "binary", prop = 0.853)
+)
+```
+
+## 2. Process EPIC Simulation Data
+
+We standardize the simulated data (`epic_selected`) outputted from the Copula model into numeric formats (0/1 for binary, continuous for others) to facilitate statistical comparison.
+
+```{r}
+
+# ==============================================================================
+#  DATA PREPARATION FOR ANALYSIS
+# ==============================================================================
+#   - Load the final cohort of simulated patients selected by the Copula model.
+#   - Standardize the data to calculate the Standardized Mean Difference (SMD).
+#   - Transform categorical variables and binary variables to 0 or 1 values.
+#
+# 
+#   For example to calculate the percentage of a category (like "GOLD 1"), it has to 
+#   be first converted into a numeric format where 1 = Yes and 0 = No.
+#
+#   Example:
+#   If we have a group of 10 people where 4 are GOLD 1 (coded as 1) and 6 are 
+#   not GOLD 1 (coded as 0), summing the column gives us 4. Calculating the 
+#   mean (4 / 10) results in 0.40, which confirms that 40% of the 
+#   group are GOLD 1.
+#      
+#      
+
+# Load simulation data
+if (file.exists("epic_selected.rds")) {
+  epic_selected <- readRDS("epic_selected.rds")
+} else {
+  stop("ERROR: Could not find epic_selected.rds")
+}
+
+# Transform data 
+# We create a clean table ('epic_baseline') with only the variables we need for Table 1.
+epic_baseline <- epic_selected %>%
+  transmute(
+    
+    # --- Binary variables (Yes/No) ---
+    # Convert gender to a number: 1 = Female, 0 = Male
+    Female = case_when(
+      grepl("Female", as.character(female), ignore.case = TRUE) ~ 1,
+      as.character(female) == "1" ~ 1,
+      TRUE ~ 0
+    ),
+    
+    # Convert breathlessness (mMRC) to a number: 1 = Yes (Score > 0), 0 = No
+    `mMRC (>0)` = case_when(
+      grepl("Yes", as.character(dyspnea), ignore.case = TRUE) ~ 1,
+      as.character(dyspnea) == "1" ~ 1,
+      TRUE ~ 0
+    ),
+    
+    # --- Continuous variables averages ---
+    # Ensure these are treated as numbers so we can calculate mean and SD.
+    Age = as.numeric(age_at_COPD),
+    `Moderate Exacerbation` = as.numeric(as.character(exac_history_n_moderate)),
+    `Severe Exacerbation`   = as.numeric(as.character(exac_history_n_severe_plus)),
+    
+    # --- Categorical variables (intermediate step) ---
+    # We can't do math on "GOLD 1". We first convert it to a simple number (1, 2, 3, 4).
+    gold_num = case_when(
+      grepl("1", as.character(gold)) ~ 1,
+      grepl("2", as.character(gold)) ~ 2,
+      grepl("3", as.character(gold)) ~ 3,
+      grepl("4", as.character(gold)) ~ 4,
+      TRUE ~ NA_real_
+    ),
+    
+    # Same for smoking: Convert "Current", "Former", "Never" into 0, 1, 2.
+    smoke_num = case_when(
+      grepl("Never", as.character(smoking_status), ignore.case = TRUE) ~ 0,
+      grepl("Current", as.character(smoking_status), ignore.case = TRUE) ~ 1,
+      grepl("Former", as.character(smoking_status), ignore.case = TRUE) ~ 2,
+      as.character(smoking_status) == "0" ~ 0,
+      as.character(smoking_status) == "1" ~ 1,
+      as.character(smoking_status) == "2" ~ 2,
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  
+  #    Create the binary encoding
+  #    Here we split the categories into specific Yes/No columns.
+  #    Example: If a patient is GOLD 1, the 'GOLD 1' column gets a 1, and 'GOLD 1' gets a 0.
+  mutate(
+    `GOLD 1` = as.integer(gold_num == 1),
+    `GOLD 2` = as.integer(gold_num == 2),
+    `GOLD 3` = as.integer(gold_num == 3),
+    `GOLD 4` = as.integer(gold_num == 4),
+    
+    `Never Smoker`   = as.integer(smoke_num == 0),
+    `Current Smoker` = as.integer(smoke_num == 1),
+    `Former Smoker`  = as.integer(smoke_num == 2)
+  )
+```
+
+## 3. Generate Table 1 and Determine **Standardized Mean Difference**
+
+We calculate the Mean (SD) for continuous variables and percentages for binary variables. We also compute the standardized mean difference.
+
+```{r}
+# ==============================================================================
+#  STATISTICAL COMPARISON (SMD CALCULATION)
+# ==============================================================================
+#   To validate the simulation, we compare the distribution of baseline characteristics from 
+#   the EPIC simulated cohort to NOVELTY to determine the standardized mean difference (SMD)
+# 
+#   SMD is a statistical score that measures balance between groups
+#     - SMD < 0.1 is considered no meaningful difference between the two groups
+#     - SMD > 0.1 indicates a meaningful difference between the two groups.
+
+# Function to calculate statistics for a single variable
+calc_stats_row <- function(var_name, nov_target, epic_data_col) {
+  epic_vals <- epic_data_col
+  
+  # --- Calculate mean EPIC variable values ---
+  m1 <- mean(epic_vals, na.rm = TRUE)
+  
+  # Calculate Standard Deviation (SD) based on variable type
+  if (nov_target$type == "continuous") {
+    # For continuous variables (e.g., Age), use standard SD
+    s1 <- sd(epic_vals, na.rm = TRUE)
+  } else {
+    # For binary variables (e.g., Smoking), we derive SD from the proportion (p).
+    # Formula: SD = sqrt(p * (1 - p))
+    # This is required to calculate SMD
+    s1 <- sqrt(m1 * (1 - m1)) 
+  }
+  
+  # --- Obtain NOVELTY characteristics ---
+  if (nov_target$type == "continuous") {
+    m2 <- nov_target$mean
+    s2 <- nov_target$sd
+  } else {
+    m2 <- nov_target$prop
+    s2 <- sqrt(m2 * (1 - m2)) 
+  }
+  
+  # --- Calculate SMD ---
+  # Formula: (Mean1 - Mean2) / Pooled Standard Deviation
+  pooled_sd <- sqrt((s1^2 + s2^2) / 2)
+  smd <- if (pooled_sd == 0) 0 else (m1 - m2) / pooled_sd
+  
+  # Return the results as a single row for the dataframe
+  data.frame(
+    Variable  = var_name,
+    Type      = nov_target$type,
+    EPIC_Mean = m1,
+    EPIC_SD   = s1,
+    NOV_Mean  = m2,
+    NOV_SD    = s2,
+    SMD       = abs(smd),
+    stringsAsFactors = FALSE
+  )
+}
+
+# Run the calculation for every variable in the list
+stats_list <- lapply(names(novelty_baseline), function(v) {
+  calc_stats_row(v, novelty_baseline[[v]], epic_baseline[[v]])
+})
+
+# Combine all the rows into one table
+raw_results <- do.call(rbind, stats_list)
+
+# --- Formatting for presentation ---
+# Convert raw numbers into readable text (e.g., "0.482" becomes "48.20%")
+table_one <- raw_results %>%
+  mutate(
+    `NOVELTY Target` = case_when(
+      Type == "continuous" ~ sprintf("%.2f (%.2f)", NOV_Mean, NOV_SD),
+      Type == "binary"     ~ sprintf("%.2f%%", NOV_Mean * 100)
+    ),
+    `EPIC Cohort` = case_when(
+      Type == "continuous" ~ sprintf("%.2f (%.2f)", EPIC_Mean, EPIC_SD),
+      Type == "binary"     ~ sprintf("%.2f%%", EPIC_Mean * 100)
+    ),
+    `SMD` = sprintf("%.3f", SMD)
+  ) %>%
+  select(Variable, `NOVELTY Target`, `EPIC Cohort`, SMD)
+
+# Print table
+kable(table_one, caption = "Table 1: Comparison of NOVELTY vs. EPIC Simulated Cohort")
+```
+
+## 4. Visual Comparison
+
+Below is a visualization of the Standardized Mean Differences (SMD) for the baseline characteristics. The red dashed line at **0.1** represents the SMD threshold representing a balanced comparative cohort.
+
+```{r}
+plot_data <- raw_results
+
+# Generate Plot
+ggplot(plot_data, aes(x = SMD, y = reorder(Variable, SMD))) + 
+  # Set a single static color here (e.g., "#2c3e50" is a nice dark blue-grey)
+  geom_point(size = 4, color = "#2c3e50") + 
+  geom_vline(xintercept = 0.1, linetype = "dashed", color = "red", alpha = 0.5) +
+  geom_vline(xintercept = 0, color = "black") +
+  labs(
+    title = "EPIC Simulation vs NOVELTY",
+    subtitle = "Standardized Mean Difference",
+    x = "Absolute SMD",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title    = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5)
+  )
+  
+```
