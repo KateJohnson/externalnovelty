@@ -127,7 +127,7 @@ Baseline characteristics are presented, reporting the Mean (SD) for continuous v
 # Define NOVELTY Baseline
 novelty_baseline <- tibble::tribble(
   ~Variable,                ~Type,         ~NOV_Mean, ~NOV_SD_Reported,
-  "Age",                    "continuous",  63.7,      9.7,
+  "Age",                    "continuous",  63.7,      9.8,
   "Female",                 "binary",      0.482,     NA,
   "GOLD 1",                 "binary",      0.219,     NA,
   "GOLD 2",                 "binary",      0.473,     NA,
@@ -188,6 +188,22 @@ epic_novelty_baseline<- epic_novelty_calc %>%
     SMD = sprintf("%.3f", SMD)
   ) %>%
   select(Variable, `NOVELTY`, `EPIC`, SMD, Status)
+
+# Add number of NOVELTY and EPIC patients included for the baseline table
+n_epic <- nrow(epic_baseline)      
+n_novelty <- "973"               
+
+# Create the "Total" row
+total_row <- tibble::tibble(
+  Variable  = "Total Number of Patients (N)",
+  `NOVELTY` = as.character(n_novelty),
+  `EPIC`    = as.character(n_epic),
+  SMD       = "",                  # Leave blank (no SMD for sample size)
+  Status    = ""                   # Leave blank (no status for sample size)
+)
+
+# 3. Attach it to the top of your table
+epic_novelty_baseline <- bind_rows(total_row, epic_novelty_baseline)
 
 # Print table
 kable(epic_novelty_baseline, caption = "Table 1: Comparison of NOVELTY vs. EPIC Cohort")
