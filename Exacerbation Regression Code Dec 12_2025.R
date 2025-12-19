@@ -131,14 +131,13 @@ analysis_EPIC<- exac_data_EPIC  %>%
     events_mod = sum(events_mod_new, na.rm = TRUE), # Sum of new events
     events_sev = sum(events_sev_new, na.rm = TRUE), # Sum of new events
     exposure   = sum(followup_time, na.rm = TRUE),  # Total time exposed
-    .groups = "drop"
   ) %>%
   # Removes rows with neglibible follow-up duration
   filter(exposure > 0.001)
 
 # Check: Ensure we have reasonable numbers before running the model
 cat("\n--- QC: Summary Data ---\n")
-print(analysis_cohort %>% group_by(med_group) %>% 
+print(analysis_EPIC %>% group_by(med_group) %>% ## CORRECTION: Change from analysis cohort to analysis_EPIC
         summarise(Patients = n_distinct(unique_id), 
                   Total_Years = round(sum(exposure), 1), 
                   Total_Mod_Exac = sum(events_mod)))
