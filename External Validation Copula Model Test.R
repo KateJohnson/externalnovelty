@@ -125,7 +125,7 @@ cand <- cand %>%
   )
 
 # Load NOVELTY RDS data (can be found on the github repo)
-target <- readRDS("novelty_target_COPD.rds") #CORRECTION: File name wrong
+target <- readRDS("novelty_target_COPD.rds") #CORRECTION: add readRDS and File name wrong
 
 # Load Parameters from target 
 lev_smoking    <- target$smoking_levels
@@ -435,7 +435,7 @@ message("---------------------------------------------------")
 # Build the matrix where we combine all the 'U values from EPIC
 U_epic <- cbind(
   sex_baseline                  = u_sex,
-  ageCOPD_baseline              = u_age,
+  ageCOPD_baseline              = u_age, # This should be updated after ageCOPD_baseline is change to age at index
   smoking_baseline              = u_smoking,
   GOLDgrade_baseline            = u_gold,
   mMRC_baseline                 = u_mmrc,
