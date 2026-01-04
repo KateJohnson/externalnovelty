@@ -620,5 +620,5 @@ if (exists("combined_df") && nrow(combined_df) > 0) {
   message("\n============================================================")
   
 } else {
-  message("Skipping Multi-Run Test: 'combined_df' not found (SAVE_COMBINED might be FALSE).")
+  message("Skipping Multi-Run Test: 'combined_df' not found.")
 }
