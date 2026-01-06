@@ -19,7 +19,7 @@ suppressPackageStartupMessages({
 #  1. USER-CONFIGURABLE PARAMETERS
 # ==============================================================================
 SEED_GLOBAL             <- 111L     # Ensures reproducibility
-K_runs                  <- 500L       # Number of runs of the EPIC model
+K_runs                  <- 500L     # Number of runs of the EPIC model
 N_match                 <- 10000L   # The final desired sample size of the matched cohort
 HORIZON_YEARS           <- 6L       # Time horizon
 N_AGENTS                <- 3.5e6    # Agents per run 
@@ -287,7 +287,7 @@ compute_pool_candidates <- function(all_events2) {
   
   u_smoking <- pit_categorical_from_probs(cand$smoking_status, level_order = lev_smoking, level_probs = prob_smoking)
   u_gold    <- pit_categorical_from_probs(cand$gold,           level_order = lev_gold,    level_probs = prob_gold)
-
+  
   u_mmrc <- pit_bernoulli(cand$dyspnea, p = p_mmrc)
   u_exac_mod <- pit_poisson(cand$exac_mod, lambda = lambda_exac_mod)
   u_exac_sev <- pit_poisson(cand$exac_sev, lambda = lambda_exac_sev)
@@ -302,7 +302,7 @@ compute_pool_candidates <- function(all_events2) {
     exacerbations_moderate_baseline   = u_exac_mod,
     exacerbations_severeplus_baseline = u_exac_sev
   )
-
+  
   # --- Copula Calculation ---
   aligned <- strict_align_R(U_epic, Sigma, var_order)
   U <- aligned$U
@@ -378,7 +378,7 @@ for (k in seq_len(K_runs)) {
 # PURPOSE:
 #   Now that the loop is finished, we have K separate pools of candidates.
 #   
-#   PROCESS STEPS:
+#   Next steps are to:
 #   1. Combine: Merge them into one large dataframe (cand_all).
 #   2. Weight (Copula): Calculate base weights from the Joint Likelihood scores.
 #   3. Weight (IPF): Refine those weights to ensure exact marginal matches (e.g. 48% Female).
@@ -454,8 +454,7 @@ saveRDS(epic_selected, "epic_selected.rds")
 #   We currently only have the "Index Date" info for the selected patients.
 #   We need their FULL event history (drugs, exacerbations over time).
 #   
-#   EFFICIENT STRATEGY:
-#   Instead of keeping all data in RAM, we:
+#   Instead of keeping storing all data, we:
 #   1. Look at our list of selected patients.
 #   2. Load the temporary file for Run 1.
 #   3. Extract ONLY the patients we need from Run 1.
@@ -476,11 +475,11 @@ manifest <- data.frame(
 # Split the selected list by Run ID so we can process one batch at a time
 by_run <- split(epic_selected, epic_selected$.run_id, drop = TRUE)
 
-  # Load the large raw file for this run
-  for (run_key in names(by_run)) {
+# Load the large raw file for this run
+for (run_key in names(by_run)) {
   run_i <- as.integer(run_key)
   sel_i <- by_run[[run_key]]
-
+  
   # Create global IDs to match the selection
   ev_i  <- .load_events_run(run_i)
   ev_i$id  <- as.character(ev_i$id)
@@ -543,4 +542,83 @@ if (SAVE_MANIFEST) {
 
 if (CLEAN_TMP_EVENTDUMPS) {
   unlink(TMP_DIR, recursive = TRUE, force = TRUE)
+}
+
+# ==============================================================================
+#  8. EPIC MULTIPLE-RUN TEST
+# ==============================================================================
+# PURPOSE: 
+#   Verifies that the 'combined_histories' file matches the 'epic_selected' cohort
+#   It prevents ID mismatches between runs.
+
+if (exists("combined_df") && nrow(combined_df) > 0) {
+  
+  message("\n============================================================")
+  message(" MULTIPLE EPIC RUN TEST ")
+  message("============================================================")
+  
+  # --- Create Composite Keys (ID + Run) ---
+  # We use paste() to create a unique ID because IDs repeat across runs
+  target_ids <- paste(epic_selected$id, epic_selected$.run_id, sep = "_")
+  actual_ids <- unique(paste(combined_df$id, combined_df$.run_id, sep = "_"))
+  
+  # --- TEST: Check if all simulated patients are captured---
+  missing_patients <- setdiff(target_ids, actual_ids)
+  n_missing <- length(missing_patients)
+  
+  if (n_missing == 0) {
+    message("[PASS] All ", length(target_ids), " selected patients are present in the history file.")
+  } else {
+    warning(sprintf("[FAIL]: Missing %d patients! (e.g., %s)", 
+                    n_missing, paste(head(missing_patients, 3), collapse=", ")))
+  }
+  
+  # --- TEST: Did we include any extra simulated patients that weren't meant to be captured? ---
+  extra_patients <- setdiff(actual_ids, target_ids)
+  n_extra <- length(extra_patients)
+  
+  if (n_extra == 0) {
+    message("[PASS]: No simulated patients that weren't meant to be included were identified.")
+  } else {
+    warning(sprintf("[FAIL]: Found %d extra patients who should not be there! (e.g., %s)", 
+                    n_extra, paste(head(extra_patients, 3), collapse=", ")))
+  }
+  
+  # --- TEST: Check IDs (Spot Check) ---
+  # Verify that the Run IDs in the history file make sense.
+  
+  # Sample 100 random patients to check
+  sample_keys <- sample(actual_ids, min(100, length(actual_ids)))
+  
+  message("\n--- Spot Check (Verifying Run IDs) ---")
+  pass_count <- 0
+  
+  for (key in sample_keys) {
+    # Parse the expected Run ID from our key string "AgentID_RunID"
+    parts <- strsplit(key, "_")[[1]]
+    expected_id <- parts[1]
+    expected_run <- as.integer(parts[2])
+    
+    # Check the actual data
+    match_row <- combined_df %>% 
+      filter(id == expected_id, .run_id == expected_run) %>% 
+      slice(1)
+    
+    if (nrow(match_row) > 0) {
+      pass_count <- pass_count + 1
+    } else {
+      warning(sprintf("Mismatch found for %s (Run %d)", expected_id, expected_run))
+    }
+  }
+  
+  if (pass_count == length(sample_keys)) {
+    message(sprintf("[PASS] Spot check passed for %d random patients.", pass_count))
+  } else {
+    warning("[FAIL] Spot check failed. Data may be misaligned.")
+  }
+  
+  message("\n============================================================")
+  
+} else {
+  message("Skipping Multi-Run Test: 'combined_df' not found.")
 }

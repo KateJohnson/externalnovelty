@@ -51,7 +51,7 @@ index_lookup <- epic_selected %>%
   )
 
 # Prepare the combined_histories dataset to join with epic_selected
-  history_EPIC <- combined_histories %>%
+history_EPIC <- combined_histories %>%
   # Ensure variable types match
   mutate(
     id = as.character(id),
@@ -97,7 +97,7 @@ exac_data_EPIC <- history_EPIC %>%
   # The first row for every patient is their status at the Index Date.
   # Because of the logic above, it has 0 follow-up and 0 new events.
   # We delete this row so we only analyze the follow-up period (Index -> Future).
-  slice(-1) %>%
+  filter(followup_time > 0) %>%
   ungroup()
 
 # ==============================================================================
@@ -125,20 +125,19 @@ analysis_EPIC<- exac_data_EPIC  %>%
   # intervals (Year 1, 2, 3) rather than summarizing a single lifetime value.
   # Creates separate rows if a patient changes medication mid-year, ensuring follow-up 
   # is assessed using the correct drug.
-  mutate(analysis_year = floor(local_time)) %>%
-  group_by(unique_id, analysis_year, med_group) %>%
+  group_by(unique_id, med_group) %>%
   summarise(
     events_mod = sum(events_mod_new, na.rm = TRUE), # Sum of new events
     events_sev = sum(events_sev_new, na.rm = TRUE), # Sum of new events
     exposure   = sum(followup_time, na.rm = TRUE),  # Total time exposed
     .groups = "drop"
   ) %>%
-  # Removes rows with neglibible follow-up duration
-  filter(exposure > 0.001)
+  # Removes rows with negligible follow-up duration
+  filter(exposure > 0.04)
 
 # Check: Ensure we have reasonable numbers before running the model
 cat("\n--- QC: Summary Data ---\n")
-print(analysis_cohort %>% group_by(med_group) %>% 
+print(analysis_EPIC %>% group_by(med_group) %>% 
         summarise(Patients = n_distinct(unique_id), 
                   Total_Years = round(sum(exposure), 1), 
                   Total_Mod_Exac = sum(events_mod)))
