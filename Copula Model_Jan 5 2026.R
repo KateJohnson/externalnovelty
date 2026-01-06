@@ -19,10 +19,10 @@ suppressPackageStartupMessages({
 #  1. USER-CONFIGURABLE PARAMETERS
 # ==============================================================================
 SEED_GLOBAL             <- 111L     # Ensures reproducibility
-K_runs                  <- 500L     # Number of runs of the EPIC model
+K_runs                  <- 2     # Number of runs of the EPIC model
 N_match                 <- 10000L   # The final desired sample size of the matched cohort
 HORIZON_YEARS           <- 6L       # Time horizon
-N_AGENTS                <- 3.5e6    # Agents per run 
+N_AGENTS                <- 10000    # Agents per run 
 
 ## OUTPUT CONTROLS
 SAVE_DIR                <- "~/Epic Code/NOVELTY Outputs/epic_histories"
@@ -285,7 +285,7 @@ compute_pool_candidates <- function(all_events2) {
   u_sex  <- pit_bernoulli(cand$female, p = p_sex)
   u_age  <- clip01(plnorm(pmax(cand$age_at_index, 1e-6), meanlog = ml_age, sdlog = sl_age))
   
-  u_smoking <- pit_categorical_from_probs(cand$smoking_status, level_order = lev_smoking, level_probs = prob_smoking)
+  u_smoking <- pit_categorical_from_probs(cand$smoking_status, level_order = lev_smoking, level_probs = prob_smoking) #  pit_categorical_from_probs function is not defined
   u_gold    <- pit_categorical_from_probs(cand$gold,           level_order = lev_gold,    level_probs = prob_gold)
   
   u_mmrc <- pit_bernoulli(cand$dyspnea, p = p_mmrc)
