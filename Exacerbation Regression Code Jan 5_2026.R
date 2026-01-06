@@ -129,7 +129,8 @@ analysis_EPIC<- exac_data_EPIC  %>%
   summarise(
     events_mod = sum(events_mod_new, na.rm = TRUE), # Sum of new events
     events_sev = sum(events_sev_new, na.rm = TRUE), # Sum of new events
-    exposure   = sum(followup_time, na.rm = TRUE),  # Total time exposed
+    exposure   = sum(followup_time, na.rm = TRUE),  # Total time exposed # I think we're overestimating exposure here in instances where medication change happens
+    # at the time of exacerbation. Because follow-up time = c(0, diff(local_time)), time elapsed from the previous record, but time=0 at the medication change event
     .groups = "drop"
   ) %>%
   # Removes rows with negligible follow-up duration
@@ -187,3 +188,4 @@ results <- bind_rows(
 
 cat("\n=== FINAL RESULTS ===\n")
 print(results)
+
