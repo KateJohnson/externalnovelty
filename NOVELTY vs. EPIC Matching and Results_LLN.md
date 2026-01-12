@@ -41,7 +41,7 @@ Below is a visualization of the Standardized Mean Differences (SMD) for
 the baseline characteristics. The red dashed line at **0.1** represents
 the SMD threshold representing a balanced comparative cohort.
 
-![](NOVELTY-vs.-EPIC-Matching-and-Results_LLN2_files/figure-commonmark/unnamed-chunk-3-1.png)
+![](NOVELTY-vs.-EPIC-Matching-and-Results_LLN_files/figure-commonmark/unnamed-chunk-3-1.png)
 
 ## 4. External Validation: Comparing EPIC and NOVELTY Results
 
