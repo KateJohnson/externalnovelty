@@ -18,14 +18,14 @@ suppressPackageStartupMessages({
 # ==============================================================================
 #  1. USER-CONFIGURABLE PARAMETERS
 # ==============================================================================
-SEED_GLOBAL             <- 111L     # Ensures reproducibility
-K_runs                  <- 500L     # Number of runs of the EPIC model
+SEED_GLOBAL             <- 136L     # Ensures reproducibility
+K_runs                  <- 1500L    # Number of runs of the EPIC model
 N_match                 <- 10000L   # The final desired sample size of the matched cohort
 HORIZON_YEARS           <- 6L       # Time horizon
 N_AGENTS                <- 3.5e6    # Agents per run 
 
 ## OUTPUT CONTROLS
-SAVE_DIR                <- "~/Epic Code/NOVELTY Outputs/epic_histories"
+SAVE_DIR                <- "~/External Validation Novelty/epic_histories"
 SAVE_FORMAT             <- "rds"   
 SAVE_INDIVIDUAL         <- TRUE     # Save one file per patient
 SAVE_COMBINED           <- TRUE     # Save one large file 
@@ -38,12 +38,12 @@ set.seed(SEED_GLOBAL)
 #  2. LOAD TARGET BUNDLE (NOVELTY DATA)
 # ==============================================================================
 # PURPOSE:
-#  This section imports the relationship between patient characeteristics fron NOVELTY. 
+#  This section imports the relationship between patient characteristics fron NOVELTY. 
 #  Matching characteristics include: Gender, Age, mMRC, prior moderate exacerbations, 
 #  prior severe exacerbations, GOLD stage, and smoking status.
 # ==============================================================================
 
-target <- readRDS("NOVELTY_target_Nov25.rds")
+target <- readRDS("novelty_COPDLLN.rds")
 var_order <- target$var_order
 Sigma <- target$Sigma
 dimnames(Sigma) <- list(var_order, var_order)
@@ -75,21 +75,18 @@ lambda_exac_sev <- target$lambda_exacerbations_severeplus_baseline
 # EXAMPLE (GOLD STAGE):
 #   - Context: GOLD 1 represents the "healthiest" 20% of the population.
 #   - Input: An EPIC agent has GOLD 1.
-#   - Logic: The `pit_categorical` function assigns a random number between 0.00 and 0.20.
+#   - Logic: The `pit_categorical_from_probs` function assigns a random number between 0.00 and 0.20.
 #   - Output: u = 0.15 (This value is now ready for the Copula).
 
 clip01 <- function(U, eps = 1e-9) {pmin(pmax(U, eps), 1 - eps)}
 
-pit_categorical <- function(fct, level_order) {
-  fct <- factor(fct, levels = level_order, ordered = TRUE)
-  tab <- prop.table(table(fct, useNA = "no"))
-  p   <- as.numeric(tab[level_order]); p[is.na(p)] <- 0
-  cum <- cumsum(p)
-  idx <- match(fct, level_order)
-  upper <- cum[idx]
-  lower <- ifelse(idx == 1, 0, cum[idx - 1])
-  u <- stats::runif(length(fct), lower, upper)
-  clip01(u)
+pit_categorical_from_probs <- function(values, level_order, level_probs) {
+  idx <- match(as.integer(values), as.integer(level_order))
+  if (anyNA(idx)) stop("Found NAs or values not in level_order.")
+  p <- as.numeric(level_probs); p <- p / sum(p)
+  cum_all <- cumsum(p); lower_all <- c(0, head(cum_all, -1))
+  lower <- lower_all[idx]; upper <- cum_all[idx]
+  clip01(stats::runif(length(values), min = lower, max = upper))
 }
 
 pit_bernoulli <- function(y01, p) {
@@ -143,7 +140,7 @@ strict_align_R <- function(U_epic, Sigma, var_order) {
 #      the error (discrepancy) decreases until the weights converge to a stable solution 
 #      that satisfies all marginal targets simultaneously.
 
-ipf_weights <- function(w, factors, levels_list, targets_list, max_iter = 500, tol = 1e-8) {
+ipf_weights <- function(w, factors, levels_list, targets_list, max_iter = 10000, tol = 1e-8) {
   stopifnot(length(factors) == length(levels_list))
   w <- as.numeric(w)
   w[!is.finite(w) | w < 0] <- 0
@@ -428,7 +425,7 @@ w_ipf <- ipf_weights(
     sex     = prob_sex_vec,           
     dyspnea = prob_mmrc_vec           
   ),
-  max_iter = 1000,
+  max_iter = 10000,
   tol = 1e-8
 )
 

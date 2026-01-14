@@ -82,22 +82,20 @@ history_EPIC <- combined_histories %>%
 exac_data_EPIC <- history_EPIC %>%
   group_by(unique_id) %>%
   mutate(
-    # --- Calculate Number of New Events ---
-    # The exac history data is cumulative (e.g., 5 events, then 6 events).
-    # We use diff() to determine the change (ex. 6 - 5 = 1 new event).
+    # Calculate time elapsed since previous record
+    followup_time = c(0, diff(local_time)),
+    # Identify the medication the patient was on during that interval.
+    # lag() is used because the time spent getting to the current local_time
+    # was spent on the medication status recorded in the previous row.
+    med_status_start_of_interval = lag(medication_status),
+    # Calculate new events occurring at the end of this interval
     events_mod_new = c(0, diff(exac_history_n_moderate)),
-    events_sev_new = c(0, diff(exac_history_n_severe_plus)),
-    
-    # --- Calculate Follow-up Time ---
-    # We calculate the time elapsed since the previous record.
-    followup_time  = c(0, diff(local_time))
+    events_sev_new = c(0, diff(exac_history_n_severe_plus))
   ) %>%
-  
-  # --- Remove first row ---
-  # The first row for every patient is their status at the Index Date.
-  # Because of the logic above, it has 0 follow-up and 0 new events.
-  # We delete this row so we only analyze the follow-up period (Index -> Future).
+  # Remove the baseline row (it has no 'previous' med and 0 exposure)
   filter(followup_time > 0) %>%
+  # Override medication_status with the lagged version for the regression
+  mutate(medication_status = med_status_start_of_interval) %>%
   ungroup()
 
 # ==============================================================================
@@ -133,7 +131,7 @@ analysis_EPIC<- exac_data_EPIC  %>%
     .groups = "drop"
   ) %>%
   # Removes rows with negligible follow-up duration
-  filter(exposure > 0.04)
+  filter(exposure > 0.001)
 
 # Check: Ensure we have reasonable numbers before running the model
 cat("\n--- QC: Summary Data ---\n")
