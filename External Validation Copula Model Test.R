@@ -9,7 +9,7 @@ library(copula)
 
 settings <- get_default_settings()
 settings$record_mode <- 2
-settings$n_base_agents <- 3.5e6
+settings$n_base_agents <- 3.5e4
 init_session(settings = settings)
 input <- get_input()
 time_horizon <- 6
@@ -125,9 +125,9 @@ cand <- cand %>%
   )
 
 # Load NOVELTY RDS data (can be found on the github repo)
-target <- readRDS("NOVELTY_target_Nov25.rds")
+target <- readRDS("novelty_COPDLLN.rds") # change file name
 
-# Load Parameters from target 
+ # Load Parameters from target 
 lev_smoking    <- target$smoking_levels
 prob_smoking   <- target$smoking_probs 
 lev_gold       <- target$GOLD_levels

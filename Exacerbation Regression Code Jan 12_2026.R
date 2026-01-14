@@ -65,7 +65,7 @@ history_EPIC <- combined_histories %>%
   
   # We link the history file to the lookup dataset using 'id' and the '.run_id'
   # This adds the column 'index_time' to every row of the patient's history.
-  inner_join(index_lookup, by = c("id", ".run_id")) %>%
+  inner_join(index_lookup, by = c("id", ".run_id")) %>% ## This step is deleting all observations
   
   # We delete all rows where 'local_time' is less than 'index_time'.
   # This removes the Pre-Index History so we don't analyze it.
